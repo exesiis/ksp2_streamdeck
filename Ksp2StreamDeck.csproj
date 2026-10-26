@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>Ksp2StreamDeck</AssemblyName>
+    <RootNamespace>Ksp2StreamDeck</RootNamespace>
+    <!-- Dossier du jeu: surchargeable avec -p:GameDir=... -->
+    <GameDir Condition="'$(GameDir)' == ''">F:\Games\Games\Kerbal.Space.Program.2.v14669105</GameDir>
+    <Managed>$(GameDir)\KSP2_x64_Data\Managed</Managed>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <DebugType>portable</DebugType>
+  </PropertyGroup>
+
+  <!-- Assemblies du jeu: references de compilation uniquement, jamais copiees -->
+  <ItemGroup>
+    <Reference Include="Ksp2Redux"><HintPath>$(Managed)\Ksp2Redux.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp"><HintPath>$(Managed)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Assembly-CSharp-firstpass"><HintPath>$(Managed)\Assembly-CSharp-firstpass.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="UnityEngine.CoreModule"><HintPath>$(Managed)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="Newtonsoft.Json"><HintPath>$(Managed)\Newtonsoft.Json.dll</HintPath><Private>false</Private></Reference>
+  </ItemGroup>
+
+</Project>
