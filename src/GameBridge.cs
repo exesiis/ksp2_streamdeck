@@ -57,6 +57,7 @@ namespace Ksp2StreamDeck
 				["paused"] = Safe("paused", () => game.ViewController.IsPaused, false),
 				["speedSurface"] = Safe("srfSpeed", () => v.SrfSpeedMagnitude, 0.0),
 				// Vitesse affichee: le jeu choisit seul entre surface, orbite et cible (voir docs/api-jeu.md)
+				["heading"] = Safe("heading", () => v.Heading, 0.0),
 				["speedMode"] = Safe("speedMode", () => v.speedMode.ToString().ToLowerInvariant(), "surface"),
 				["speed"] = Safe("speed", () => v.speedMode == SpeedDisplayMode.Surface ? v.SrfSpeedMagnitude : v.speedMode == SpeedDisplayMode.Target ? v.TargetSpeed : v.OrbitalSpeed, 0.0),
 				["speedOrbital"] = Safe("orbSpeed", () => v.OrbitalSpeed, 0.0),

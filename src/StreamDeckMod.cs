@@ -6,9 +6,8 @@ using UnityEngine;
 namespace Ksp2StreamDeck
 {
 	/// <summary>
-	/// Point d'entree du mod. Phase 3: lecture seule. Diffuse la telemetrie a 10 Hz sur
-	/// ws://127.0.0.1:8765. Les commandes recues sont mises en file puis journalisees
-	/// (l'execution arrive en phase 4).
+	/// Point d'entree du mod. Diffuse la telemetrie a 10 Hz sur ws://127.0.0.1:8765 et
+	/// execute les commandes recues (mises en file, puis jouees sur le thread principal).
 	/// </summary>
 	public class StreamDeckMod : KerbalMod
 	{
@@ -17,6 +16,7 @@ namespace Ksp2StreamDeck
 
 		private WebSocketServer _server;
 		private GameBridge _bridge;
+		private GameCommands _commandRunner;
 		private readonly ConcurrentQueue<string> _commands = new ConcurrentQueue<string>();
 		private float _next;
 
@@ -25,6 +25,7 @@ namespace Ksp2StreamDeck
 		public override void OnInitialized()
 		{
 			_bridge = new GameBridge(m => SWLogger?.LogWarning("[StreamDeck] " + m));
+			_commandRunner = new GameCommands(Info);
 			_server = new WebSocketServer(Port);
 			_server.Log += Info;
 			_server.MessageReceived += _commands.Enqueue;
@@ -43,8 +44,8 @@ namespace Ksp2StreamDeck
 		{
 			if (_server == null) return;
 
-			// Phase 3: on vide la file pour qu'elle ne grossisse pas, sans rien executer.
-			while (_commands.TryDequeue(out string cmd)) Info("commande recue (non executee en lecture seule): " + cmd);
+			// Les commandes arrivent sur un thread reseau; elles s'executent ici, sur le thread principal d'Unity.
+			while (_commands.TryDequeue(out string cmd)) _commandRunner.Execute(cmd);
 
 			if (Time.unscaledTime < _next) return;
 			_next = Time.unscaledTime + Period;
