@@ -19,6 +19,7 @@ namespace Ksp2StreamDeck
 		private GameCommands _commandRunner;
 		private readonly ConcurrentQueue<string> _commands = new ConcurrentQueue<string>();
 		private float _next;
+		private bool _readFailed;
 
 		private void Info(string message) { SWLogger?.LogInfo("[StreamDeck] " + message); }
 
@@ -51,7 +52,14 @@ namespace Ksp2StreamDeck
 			_next = Time.unscaledTime + Period;
 			if (_server.ClientCount == 0) return; // personne n'ecoute: on ne lit pas le jeu pour rien
 
-			var data = _bridge.ReadTelemetry();
+			// Pendant un changement de scene (menu, chargement) le jeu peut lever des exceptions:
+			// on envoie "pas de vaisseau" (data = null) au lieu de planter, avec une seule alerte dans le journal.
+			System.Collections.Generic.Dictionary<string, object> data = null;
+			try { data = _bridge.ReadTelemetry(); }
+			catch (System.Exception e)
+			{
+				if (!_readFailed) { _readFailed = true; Info("lecture de la telemetrie impossible (changement de scene ?): " + e.GetType().Name + " " + e.Message); }
+			}
 			_server.Broadcast(JsonConvert.SerializeObject(new { type = "telemetry", data }));
 		}
 

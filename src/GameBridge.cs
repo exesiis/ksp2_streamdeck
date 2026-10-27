@@ -42,6 +42,12 @@ namespace Ksp2StreamDeck
 				return s != VesselSituations.PreLaunch && s != VesselSituations.Landed && s != VesselSituations.Splashed;
 			}, false);
 
+			// Etagement: meme source et meme regle que le HUD du jeu. Un seul etage restant n'est "pret" que
+			// s'il n'est pas deja actif (voir StagingDataProvider.GetHasReadyStage).
+			var staging = Safe<StagingComponent>("staging", () => v.SimulationObject.FindComponent<StagingComponent>(), null);
+			int stageCount = staging == null ? 0 : Safe("stageCount", () => staging.StageCount, 0);
+			bool stageReady = staging != null && Safe("stageReady", () => stageCount > 1 || (stageCount == 1 && !staging.AvailableStages[0].IsActive), false);
+
 			bool On(KSPActionGroup g) => Safe("group" + g, () => v.GetActionGroupState(g) == KSPActionGroupState.True, false);
 
 			var t = new Dictionary<string, object>
@@ -58,6 +64,8 @@ namespace Ksp2StreamDeck
 				["speedSurface"] = Safe("srfSpeed", () => v.SrfSpeedMagnitude, 0.0),
 				// Vitesse affichee: le jeu choisit seul entre surface, orbite et cible (voir docs/api-jeu.md)
 				["heading"] = Safe("heading", () => v.Heading, 0.0),
+				["stageCount"] = stageCount,
+				["stageReady"] = stageReady,
 				["speedMode"] = Safe("speedMode", () => v.speedMode.ToString().ToLowerInvariant(), "surface"),
 				["speed"] = Safe("speed", () => v.speedMode == SpeedDisplayMode.Surface ? v.SrfSpeedMagnitude : v.speedMode == SpeedDisplayMode.Target ? v.TargetSpeed : v.OrbitalSpeed, 0.0),
 				["speedOrbital"] = Safe("orbSpeed", () => v.OrbitalSpeed, 0.0),
@@ -78,6 +86,9 @@ namespace Ksp2StreamDeck
 				["gear"] = On(KSPActionGroup.Gear),
 				["lights"] = On(KSPActionGroup.Lights),
 				["timeWarp"] = Safe("warp", () => Math.Round((double)game.ViewController.TimeWarp.CurrentRate), 1.0),
+				// Numero du niveau de warp (0 = x1) et nombre de niveaux: pour la rangee de chevrons de la molette
+				["timeWarpIndex"] = Safe("warpIndex", () => game.ViewController.TimeWarp.CurrentRateIndex, 0),
+				["timeWarpLevels"] = Safe("warpLevels", () => PhysicsSettings.TimeWarpLevels.Length, 11),
 				["node"] = null, // phase 4+ (hors perimetre de la v1)
 			};
 			return t;
