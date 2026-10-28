@@ -58,6 +58,13 @@ namespace Ksp2StreamDeck
 		/// <summary>Bascule explicite (on -> off, off -> on) pour que le jeu et l'affichage restent d'accord.</summary>
 		private void Toggle(VesselComponent v, string name)
 		{
+			if (name == "rcs")
+			{
+				v.IsRCSEnabled = !v.IsRCSEnabled;
+				_log("commande toggle rcs -> " + (v.IsRCSEnabled ? "on" : "off"));
+				return;
+			}
+
 			KSPActionGroup group;
 			switch (name)
 			{

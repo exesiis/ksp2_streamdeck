@@ -92,7 +92,8 @@ namespace Ksp2StreamDeck
 						if (Enum.TryParse(name, out AutopilotMode mode) && v.Autopilot.CanSetMode(mode)) ok.Add(name);
 					return string.Join(",", ok);
 				}, ""),
-				["rcs"] = On(KSPActionGroup.RCS),
+				// Etat reel du RCS sur le vaisseau (la meme valeur que lit l'interface du jeu), pas le groupe d'action
+				["rcs"] = Safe("rcs", () => v.IsRCSEnabled, false),
 				["gear"] = On(KSPActionGroup.Gear),
 				["lights"] = On(KSPActionGroup.Lights),
 				["timeWarp"] = Safe("warp", () => Math.Round((double)game.ViewController.TimeWarp.CurrentRate), 1.0),
