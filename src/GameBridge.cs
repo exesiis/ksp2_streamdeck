@@ -83,14 +83,15 @@ namespace Ksp2StreamDeck
 				// Etat reel du pilote automatique (et non le groupe d'action): c'est ce que le jeu affiche
 				["sas"] = Safe("sas", () => v.Autopilot.Enabled, false),
 				["sasMode"] = Safe("sasMode", () => v.Autopilot.AutopilotMode.ToString(), ""),
-				// Modes que le jeu accepterait maintenant (CanSetMode): les touches Manoeuvre s'estompent sinon
+				// Modes que le jeu accepterait maintenant (CanSetMode), separes par des virgules: les touches Manoeuvre s'estompent sinon.
+				// Une chaine, pas un tableau: le serialiseur du jeu etiquette les tableaux ($type / $values).
 				["sasAvailable"] = Safe("sasAvailable", () =>
 				{
 					var ok = new List<string>();
 					foreach (string name in GameCommands.SasModes)
 						if (Enum.TryParse(name, out AutopilotMode mode) && v.Autopilot.CanSetMode(mode)) ok.Add(name);
-					return ok.ToArray();
-				}, new string[0]),
+					return string.Join(",", ok);
+				}, ""),
 				["rcs"] = On(KSPActionGroup.RCS),
 				["gear"] = On(KSPActionGroup.Gear),
 				["lights"] = On(KSPActionGroup.Lights),
@@ -100,7 +101,19 @@ namespace Ksp2StreamDeck
 				["timeWarpLevels"] = Safe("warpLevels", () => PhysicsSettings.TimeWarpLevels.Length, 11),
 				["node"] = null, // phase 4+ (hors perimetre de la v1)
 			};
+			LogSasChange(t);
 			return t;
+		}
+
+		// Diagnostic SAS: une ligne a chaque changement (ce que fait le joueur dans le jeu, pas seulement nos commandes)
+		private string _lastSas;
+		private void LogSasChange(Dictionary<string, object> t)
+		{
+			string avail = (string)t["sasAvailable"];
+			string now = "sas=" + t["sas"] + " mode=" + t["sasMode"] + " vitesse=" + t["speedMode"] + " dispo=[" + avail + "]";
+			if (now == _lastSas) return;
+			_lastSas = now;
+			_log("etat " + now);
 		}
 
 		private T Safe<T>(string field, Func<T> read, T fallback)
