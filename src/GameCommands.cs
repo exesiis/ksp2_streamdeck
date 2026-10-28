@@ -77,10 +77,10 @@ namespace Ksp2StreamDeck
 			_log("commande toggle " + name + " -> " + (!on ? "on" : "off"));
 		}
 
-		// Modes SAS acceptes (liste blanche): ceux de l'interface du jeu qui ne demandent ni cible ni noeud
+		// Modes SAS acceptes (liste blanche): ceux de l'interface du jeu (Target et AntiTarget demandent une cible selectionnee, Maneuver un plan de manoeuvre: sinon le jeu refuse)
 		internal static readonly HashSet<string> SasModes = new HashSet<string>
 		{
-			"StabilityAssist", "Prograde", "Retrograde", "Normal", "Antinormal", "RadialIn", "RadialOut",
+			"StabilityAssist", "Prograde", "Retrograde", "Normal", "Antinormal", "RadialIn", "RadialOut", "Target", "AntiTarget", "Maneuver",
 		};
 
 		/// <summary>
