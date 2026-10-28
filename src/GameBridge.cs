@@ -80,8 +80,17 @@ namespace Ksp2StreamDeck
 				["ecMax"] = Capacity(ecId, "ec"),
 				["mp"] = Stored(mpId, "mp"),
 				["mpMax"] = Capacity(mpId, "mp"),
-				["sas"] = On(KSPActionGroup.SAS),
+				// Etat reel du pilote automatique (et non le groupe d'action): c'est ce que le jeu affiche
+				["sas"] = Safe("sas", () => v.Autopilot.Enabled, false),
 				["sasMode"] = Safe("sasMode", () => v.Autopilot.AutopilotMode.ToString(), ""),
+				// Modes que le jeu accepterait maintenant (CanSetMode): les touches Manoeuvre s'estompent sinon
+				["sasAvailable"] = Safe("sasAvailable", () =>
+				{
+					var ok = new List<string>();
+					foreach (string name in GameCommands.SasModes)
+						if (Enum.TryParse(name, out AutopilotMode mode) && v.Autopilot.CanSetMode(mode)) ok.Add(name);
+					return ok.ToArray();
+				}, new string[0]),
 				["rcs"] = On(KSPActionGroup.RCS),
 				["gear"] = On(KSPActionGroup.Gear),
 				["lights"] = On(KSPActionGroup.Lights),

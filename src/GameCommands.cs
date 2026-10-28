@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using KSP;
 using KSP.Game;
 using KSP.Sim;
@@ -45,6 +46,7 @@ namespace Ksp2StreamDeck
 					case "toggle": Toggle(v, (string)o["name"]); break;
 					case "throttle": Throttle(view, v, o); break;
 					case "launch": Launch(v); break;
+					case "sas": Sas(v, o); break;
 					default: _log("commande inconnue ignoree: " + cmd); break;
 				}
 			}
@@ -66,6 +68,41 @@ namespace Ksp2StreamDeck
 			bool on = v.GetActionGroupState(group) == KSPActionGroupState.True;
 			v.SetActionGroup(group, !on);
 			_log("commande toggle " + name + " -> " + (!on ? "on" : "off"));
+		}
+
+		// Modes SAS acceptes (liste blanche): ceux de l'interface du jeu qui ne demandent ni cible ni noeud
+		internal static readonly HashSet<string> SasModes = new HashSet<string>
+		{
+			"StabilityAssist", "Prograde", "Retrograde", "Normal", "Antinormal", "RadialIn", "RadialOut",
+		};
+
+		/// <summary>
+		/// {"cmd":"sas","mode":"Prograde"}: choisit le mode et allume le pilote automatique s'il est eteint.
+		/// {"cmd":"sas","value":false}: eteint le pilote automatique.
+		/// Le jeu refuse certains modes (par exemple verrouillage sur la vitesse a l'arret): journalise.
+		/// </summary>
+		private void Sas(VesselComponent v, JObject o)
+		{
+			if (v.Autopilot == null) { _log("sas: pas de pilote automatique"); return; }
+
+			if (o["mode"] != null)
+			{
+				string name = (string)o["mode"];
+				AutopilotMode mode;
+				if (!SasModes.Contains(name) || !Enum.TryParse(name, out mode)) { _log("sas: mode '" + name + "' non pris en charge"); return; }
+				// SetMode relance le pilote avec ce mode s'il est deja allume; sinon il le memorise et on l'allume ensuite
+				if (!v.SetAutopilotMode(mode)) { _log("sas: mode " + name + " impossible dans cet etat"); return; }
+				if (!v.Autopilot.Enabled && !v.SetAutopilotEnableDisable(true)) { _log("sas: allumage impossible"); return; }
+				_log("commande sas " + name);
+			}
+			else if (o["value"] != null)
+			{
+				bool on = (bool)o["value"];
+				if (v.Autopilot.Enabled == on) return;
+				if (!v.SetAutopilotEnableDisable(on)) { _log("sas: bascule impossible"); return; }
+				_log("commande sas " + (on ? "on" : "off"));
+			}
+			else _log("sas: ni mode ni value");
 		}
 
 		private void Throttle(ViewController view, VesselComponent v, JObject o)
