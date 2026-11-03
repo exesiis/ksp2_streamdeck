@@ -4,6 +4,7 @@ using KSP.Game;
 using KSP.Sim;
 using KSP.Sim.impl;
 using KSP.Sim.ResourceSystem;
+using KSP.Sim.Maneuver;
 
 namespace Ksp2StreamDeck
 {
@@ -48,6 +49,26 @@ namespace Ksp2StreamDeck
 			int stageCount = staging == null ? 0 : Safe("stageCount", () => staging.StageCount, 0);
 			bool stageReady = staging != null && Safe("stageReady", () => stageCount > 1 || (stageCount == 1 && !staging.AvailableStages[0].IsActive), false);
 
+			// Prochain noeud de manoeuvre (le plus proche dans le temps)
+			ManeuverNodeData node = Safe<ManeuverNodeData>("node", () =>
+			{
+				ManeuverNodeData first = null;
+				foreach (var n in v.SimulationObject.ManeuverPlan.GetNodes()) if (first == null || n.Time < first.Time) first = n;
+				return first;
+			}, null);
+
+			// Niveaux de warp que le jeu autorise maintenant (altitude, poussee, physique): index maximal
+			int warpMax = Safe("warpMax", () => { bool phys; return game.ViewController.TimeWarp.GetMaxRateIndex(true, out phys); }, 0);
+
+			// Groupes d'action personnalises allumes (1 a 10), separes par des virgules
+			string groupsOn = Safe("groups", () =>
+			{
+				var on = new List<string>();
+				for (int i = 0; i < 10; i++)
+					if (v.GetActionGroupState((KSPActionGroup)(0x10000u << i)) == KSPActionGroupState.True) on.Add((i + 1).ToString());
+				return string.Join(",", on);
+			}, "");
+
 			bool On(KSPActionGroup g) => Safe("group" + g, () => v.GetActionGroupState(g) == KSPActionGroupState.True, false);
 
 			var t = new Dictionary<string, object>
@@ -72,6 +93,10 @@ namespace Ksp2StreamDeck
 				// Sans orbite utile tant que le vaisseau est au sol: null -> le Stream Deck affiche "--"
 				["apoapsis"] = hasOrbit ? Safe<object>("ap", () => v.Orbit.ApoapsisArl, null) : null,
 				["periapsis"] = hasOrbit ? Safe<object>("pe", () => v.Orbit.PeriapsisArl, null) : null,
+				["timeToPeriapsis"] = Safe("tPe", () => ((IPatchedOrbit)v.Orbiter.PatchedConicsOrbit).TimeToPe, 0.0),
+				["hasTarget"] = Safe("hasTarget", () => v.HasTargetObject, false),
+				["view"] = Safe("view", () => game.GlobalGameState.GetGameState().GameState == GameState.Map3DView ? "map" : "flight", "flight"),
+				["groups"] = groupsOn,
 				["timeToApoapsis"] = Safe("tAp", () => ((IPatchedOrbit)v.Orbiter.PatchedConicsOrbit).TimeToAp, 0.0),
 				["deltaV"] = Safe("dv", () => v.VesselDeltaV.TotalDeltaVActual, 0.0),
 				["fuelPct"] = Safe("fuel", () => v.FuelPercentage, 0.0),
@@ -100,7 +125,11 @@ namespace Ksp2StreamDeck
 				// Numero du niveau de warp (0 = x1) et nombre de niveaux: pour la rangee de chevrons de la molette
 				["timeWarpIndex"] = Safe("warpIndex", () => game.ViewController.TimeWarp.CurrentRateIndex, 0),
 				["timeWarpLevels"] = Safe("warpLevels", () => PhysicsSettings.TimeWarpLevels.Length, 11),
-				["node"] = null, // phase 4+ (hors perimetre de la v1)
+				["timeWarpMax"] = warpMax,
+				// Noeud de manoeuvre: temps restant (s) et dV requis; hasNode faux = pas de noeud
+				["hasNode"] = node != null,
+				["nodeTime"] = node == null ? 0.0 : Safe("nodeTime", () => node.Time - game.UniverseModel.UniverseTime, 0.0),
+				["nodeDv"] = node == null ? 0.0 : Safe("nodeDv", () => node.BurnRequiredDV, 0.0),
 			};
 			LogSasChange(t);
 			return t;

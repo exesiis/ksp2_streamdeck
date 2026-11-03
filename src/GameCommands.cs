@@ -4,6 +4,7 @@ using KSP;
 using KSP.Game;
 using KSP.Sim;
 using KSP.Sim.impl;
+using KSP.Sim.Maneuver;
 using Newtonsoft.Json.Linq;
 
 namespace Ksp2StreamDeck
@@ -36,6 +37,7 @@ namespace Ksp2StreamDeck
 				{
 					case "pause": view.SetPause((bool)o["value"]); Log(cmd, o); return;
 					case "warp": Warp(view, o); return;
+					case "view": View(game, o); return;
 				}
 
 				if (!view.TryGetActiveSimVessel(out VesselComponent v) || v == null) { _log(cmd + ": pas de vaisseau actif"); return; }
@@ -47,6 +49,9 @@ namespace Ksp2StreamDeck
 					case "throttle": Throttle(view, v, o); break;
 					case "launch": Launch(v); break;
 					case "sas": Sas(v, o); break;
+					case "speedMode": SpeedMode(view, o); break;
+					case "actionGroup": ActionGroup(v, o); break;
+					case "node": Node(game, v, o); break;
 					default: _log("commande inconnue ignoree: " + cmd); break;
 				}
 			}
@@ -110,6 +115,57 @@ namespace Ksp2StreamDeck
 				_log("commande sas " + (on ? "on" : "off"));
 			}
 			else _log("sas: ni mode ni value");
+		}
+
+		/// <summary>{"cmd":"speedMode","mode":"orbit|surface|target"}: affichage de vitesse du jeu (target seulement avec une cible).</summary>
+		private void SpeedMode(ViewController view, JObject o)
+		{
+			SpeedDisplayMode mode;
+			if (!Enum.TryParse((string)o["mode"], true, out mode)) { _log("speedMode: mode illisible"); return; }
+			if (!view.TryGetActiveVehicle(out IVehicle vehicle)) { _log("speedMode: pas de vehicule actif"); return; }
+			vehicle.SetSpeedDisplayMode(mode);
+			Log("speedMode", o);
+		}
+
+		/// <summary>{"cmd":"actionGroup","index":1..10}: bascule le groupe d'action personnalise.</summary>
+		private void ActionGroup(VesselComponent v, JObject o)
+		{
+			int i = o["index"] != null ? (int)o["index"] : 0;
+			if (i < 1 || i > 10) { _log("actionGroup: index hors 1..10"); return; }
+			var group = (KSPActionGroup)(0x10000u << (i - 1));
+			bool on = v.GetActionGroupState(group) == KSPActionGroupState.True;
+			v.SetActionGroup(group, !on);
+			_log("commande actionGroup " + i + " -> " + (!on ? "on" : "off"));
+		}
+
+		/// <summary>{"cmd":"view","name":"flight|map"}: vue vol ou carte (pas la station de controle: on perdrait la telemetrie).</summary>
+		private void View(GameInstance game, JObject o)
+		{
+			string name = (string)o["name"];
+			bool isMap = game.GlobalGameState.GetGameState().GameState == GameState.Map3DView;
+			// Memes appels que ViewDataProvider.SetMapEnabled
+			if (name == "map" && !isMap) { game.GlobalGameState.SetState(GameState.Map3DView); game.Map.EnableFlightMap(); }
+			else if (name == "flight" && isMap) { game.GlobalGameState.BackToPreviousState(); game.Map.DisableMap(); }
+			else return;
+			Log("view", o);
+		}
+
+		/// <summary>{"cmd":"node","op":"warpTo|delete"}: agit sur le prochain noeud de manoeuvre.</summary>
+		private void Node(GameInstance game, VesselComponent v, JObject o)
+		{
+			var plan = v.SimulationObject.ManeuverPlan;
+			var nodes = plan?.GetNodes();
+			if (nodes == null || nodes.Count == 0) { _log("node: pas de noeud"); return; }
+			var first = nodes[0];
+			foreach (var n in nodes) if (n.Time < first.Time) first = n;
+			switch ((string)o["op"])
+			{
+				case "warpTo": plan.WarpToNode(first); break;
+				// Meme chemin que la corbeille de la carte (qui retire aussi les noeuds suivants)
+				case "delete": game.SpaceSimulation.Maneuvers.RemoveNodesFromVessel(v.GlobalId, new List<ManeuverNodeData>(nodes)); break;
+				default: _log("node: operation inconnue"); return;
+			}
+			Log("node", o);
 		}
 
 		private void Throttle(ViewController view, VesselComponent v, JObject o)
