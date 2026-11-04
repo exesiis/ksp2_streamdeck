@@ -38,6 +38,7 @@ namespace Ksp2StreamDeck
 					case "pause": view.SetPause((bool)o["value"]); Log(cmd, o); return;
 					case "warp": Warp(view, o); return;
 					case "view": View(game, o); return;
+					case "app": App(game, o); return;
 				}
 
 				if (!view.TryGetActiveSimVessel(out VesselComponent v) || v == null) { _log(cmd + ": pas de vaisseau actif"); return; }
@@ -148,6 +149,30 @@ namespace Ksp2StreamDeck
 			else if (name == "flight" && isMap) { game.GlobalGameState.BackToPreviousState(); game.Map.DisableMap(); }
 			else return;
 			Log("view", o);
+		}
+
+		/// <summary>
+		/// {"cmd":"app","name":"research|missions|resources"}: ouvre la fenetre si elle est fermee, la ferme sinon
+		/// (memes proprietes que les icones de la barre d'application du jeu; le jeu refuse l'ouverture hors des vues permises).
+		/// </summary>
+		private void App(GameInstance game, JObject o)
+		{
+			var dp = game.ViewController.DataProvider;
+			if (dp == null) { _log("app: fournisseur de donnees indisponible"); return; }
+			switch ((string)o["name"])
+			{
+				case "research":
+					if (game.ResearchInventoryManager == null) { _log("app: inventaire de recherche indisponible ici"); return; }
+					dp.SetResearchManagerVisible(!dp.GetResearchManagerVisible()); break;
+				case "missions":
+					if (game.MissionControlManager?.MissionTracker == null) { _log("app: suivi de mission indisponible ici"); return; }
+					dp.SetMissionTrackerVisible(!dp.GetMissionTrackerVisible()); break;
+				case "resources":
+					if (game.ResourceManager == null) { _log("app: gestionnaire de ressources indisponible ici"); return; }
+					dp.SetResourceManagerVisible(!dp.GetResourceManagerVisible()); break;
+				default: _log("app: fenetre inconnue"); return;
+			}
+			Log("app", o);
 		}
 
 		/// <summary>{"cmd":"node","op":"warpTo|delete"}: agit sur le prochain noeud de manoeuvre.</summary>

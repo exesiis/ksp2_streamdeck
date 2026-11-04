@@ -69,6 +69,17 @@ namespace Ksp2StreamDeck
 				return string.Join(",", on);
 			}, "");
 
+			// Fenetres de la barre d'application ouvertes: research (inventaire de recherche), missions (suivi), resources (gestionnaire de ressources)
+			string appsOpen = Safe("apps", () =>
+			{
+				var dp = game.ViewController.DataProvider;
+				var on = new List<string>();
+				if (dp.GetResearchManagerVisible()) on.Add("research");
+				if (dp.GetMissionTrackerVisible()) on.Add("missions");
+				if (dp.GetResourceManagerVisible()) on.Add("resources");
+				return string.Join(",", on);
+			}, "");
+
 			bool On(KSPActionGroup g) => Safe("group" + g, () => v.GetActionGroupState(g) == KSPActionGroupState.True, false);
 
 			var t = new Dictionary<string, object>
@@ -97,6 +108,7 @@ namespace Ksp2StreamDeck
 				["hasTarget"] = Safe("hasTarget", () => v.HasTargetObject, false),
 				["view"] = Safe("view", () => game.GlobalGameState.GetGameState().GameState == GameState.Map3DView ? "map" : "flight", "flight"),
 				["groups"] = groupsOn,
+				["apps"] = appsOpen,
 				["timeToApoapsis"] = Safe("tAp", () => ((IPatchedOrbit)v.Orbiter.PatchedConicsOrbit).TimeToAp, 0.0),
 				["deltaV"] = Safe("dv", () => v.VesselDeltaV.TotalDeltaVActual, 0.0),
 				["fuelPct"] = Safe("fuel", () => v.FuelPercentage, 0.0),
