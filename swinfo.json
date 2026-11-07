@@ -5,7 +5,7 @@
 	"author": "exesi",
 	"description": "Expose la telemetrie de vol et recoit des commandes pour un Stream Deck + ou 15 touches (WebSocket local 127.0.0.1:8765).",
 	"source": "",
-	"version": "0.3.0",
+	"version": "0.3.1",
 	"main_assembly": "Ksp2StreamDeck.dll",
 	"ksp2_version": { "min": "0.0.0", "max": "*" }
 }
