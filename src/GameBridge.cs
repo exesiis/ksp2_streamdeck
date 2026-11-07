@@ -1,0 +1,171 @@
+using System;
+using System.Collections.Generic;
+using KSP.Game;
+using KSP.Sim;
+using KSP.Sim.impl;
+using KSP.Sim.ResourceSystem;
+using KSP.Sim.Maneuver;
+
+namespace Ksp2StreamDeck
+{
+	/// <summary>
+	/// Seul endroit qui parle a l'API interne du jeu. Si une mise a jour de Redux la change,
+	/// c'est ici qu'il faut corriger. Chaque champ est lu isolement: une lecture qui echoue
+	/// donne la valeur par defaut et n'est journalisee qu'une fois.
+	/// </summary>
+	public sealed class GameBridge
+	{
+		private readonly Action<string> _log;
+		private readonly HashSet<string> _failed = new HashSet<string>();
+
+		public GameBridge(Action<string> log) { _log = log; }
+
+		private static GameInstance Game => GameManager.Instance?.Game;
+
+		/// <summary>Etat du vaisseau actif au format de PROTOCOL.md, ou null s'il n'y en a pas.</summary>
+		public Dictionary<string, object> ReadTelemetry()
+		{
+			var game = Game;
+			if (game == null || game.ViewController == null) return null;
+			if (!game.ViewController.TryGetActiveSimVessel(out VesselComponent v) || v == null) return null;
+
+			var ecId = Safe("ecId", () => game.ResourceDefinitionDatabase.GetResourceIDFromName("ElectricCharge"), default(ResourceDefinitionID));
+			var mpId = Safe("mpId", () => game.ResourceDefinitionDatabase.GetResourceIDFromName("MonoPropellant"), default(ResourceDefinitionID));
+			ResourceContainerGroup group = Safe<ResourceContainerGroup>("containers", () => v.SimulationObject.PartOwner.ContainerGroup, null);
+
+			double Stored(ResourceDefinitionID id, string name) => group == null ? 0 : Safe(name + "Stored", () => group.GetResourceStoredUnits(id), 0.0);
+			double Capacity(ResourceDefinitionID id, string name) => group == null ? 0 : Safe(name + "Cap", () => group.GetResourceCapacityUnits(id), 0.0);
+
+			// AP/PE n'ont de sens qu'une fois decolle: ni sur le pas de tir, ni pose, ni a la mer
+			bool hasOrbit = Safe("hasOrbit", () =>
+			{
+				var s = v.Situation;
+				return s != VesselSituations.PreLaunch && s != VesselSituations.Landed && s != VesselSituations.Splashed;
+			}, false);
+
+			// Etagement: meme source et meme regle que le HUD du jeu. Un seul etage restant n'est "pret" que
+			// s'il n'est pas deja actif (voir StagingDataProvider.GetHasReadyStage).
+			var staging = Safe<StagingComponent>("staging", () => v.SimulationObject.FindComponent<StagingComponent>(), null);
+			int stageCount = staging == null ? 0 : Safe("stageCount", () => staging.StageCount, 0);
+			bool stageReady = staging != null && Safe("stageReady", () => stageCount > 1 || (stageCount == 1 && !staging.AvailableStages[0].IsActive), false);
+
+			// Prochain noeud de manoeuvre (le plus proche dans le temps)
+			ManeuverNodeData node = Safe<ManeuverNodeData>("node", () =>
+			{
+				ManeuverNodeData first = null;
+				foreach (var n in v.SimulationObject.ManeuverPlan.GetNodes()) if (first == null || n.Time < first.Time) first = n;
+				return first;
+			}, null);
+
+			// Niveaux de warp que le jeu autorise maintenant (altitude, poussee, physique): index maximal
+			int warpMax = Safe("warpMax", () => { bool phys; return game.ViewController.TimeWarp.GetMaxRateIndex(true, out phys); }, 0);
+
+			// Groupes d'action personnalises allumes (1 a 10), separes par des virgules
+			string groupsOn = Safe("groups", () =>
+			{
+				var on = new List<string>();
+				for (int i = 0; i < 10; i++)
+					if (v.GetActionGroupState((KSPActionGroup)(0x10000u << i)) == KSPActionGroupState.True) on.Add((i + 1).ToString());
+				return string.Join(",", on);
+			}, "");
+
+			// Fenetres de la barre d'application ouvertes: research (inventaire de recherche), missions (suivi), resources (gestionnaire de ressources)
+			string appsOpen = Safe("apps", () =>
+			{
+				var dp = game.ViewController.DataProvider;
+				var on = new List<string>();
+				if (dp.GetResearchManagerVisible()) on.Add("research");
+				if (dp.GetMissionTrackerVisible()) on.Add("missions");
+				if (dp.GetResourceManagerVisible()) on.Add("resources");
+				return string.Join(",", on);
+			}, "");
+
+			bool On(KSPActionGroup g) => Safe("group" + g, () => v.GetActionGroupState(g) == KSPActionGroupState.True, false);
+
+			var t = new Dictionary<string, object>
+			{
+				["vessel"] = Safe("name", () => v.Name, ""),
+				["situation"] = Safe("situation", () => v.Situation.ToString(), ""),
+				["altitude"] = Safe("altSea", () => v.AltitudeFromSeaLevel, 0.0),
+				["altitudeSurface"] = Safe("altSurf", () => v.AltitudeFromSurface, 0.0),
+				["altitudeSeaLevel"] = Safe("altSea", () => v.AltitudeFromSeaLevel, 0.0),
+				// Le jeu bascule seul entre sol et niveau de la mer selon l'astre (voir docs/api-jeu.md)
+				["altitudeMode"] = Safe("altMode", () => v.altimeterMode == AltimeterDisplayMode.GroundLevel ? "surface" : "orbit", "surface"),
+				["onPad"] = Safe("landed", () => v.LandedOrSplashed, false),
+				["paused"] = Safe("paused", () => game.ViewController.IsPaused, false),
+				["speedSurface"] = Safe("srfSpeed", () => v.SrfSpeedMagnitude, 0.0),
+				// Vitesse affichee: le jeu choisit seul entre surface, orbite et cible (voir docs/api-jeu.md)
+				["heading"] = Safe("heading", () => v.Heading, 0.0),
+				["stageCount"] = stageCount,
+				["stageReady"] = stageReady,
+				["speedMode"] = Safe("speedMode", () => v.speedMode.ToString().ToLowerInvariant(), "surface"),
+				["speed"] = Safe("speed", () => v.speedMode == SpeedDisplayMode.Surface ? v.SrfSpeedMagnitude : v.speedMode == SpeedDisplayMode.Target ? v.TargetSpeed : v.OrbitalSpeed, 0.0),
+				["speedOrbital"] = Safe("orbSpeed", () => v.OrbitalSpeed, 0.0),
+				// Sans orbite utile tant que le vaisseau est au sol: null -> le Stream Deck affiche "--"
+				["apoapsis"] = hasOrbit ? Safe<object>("ap", () => v.Orbit.ApoapsisArl, null) : null,
+				["periapsis"] = hasOrbit ? Safe<object>("pe", () => v.Orbit.PeriapsisArl, null) : null,
+				["timeToPeriapsis"] = Safe("tPe", () => ((IPatchedOrbit)v.Orbiter.PatchedConicsOrbit).TimeToPe, 0.0),
+				["hasTarget"] = Safe("hasTarget", () => v.HasTargetObject, false),
+				["view"] = Safe("view", () => game.GlobalGameState.GetGameState().GameState == GameState.Map3DView ? "map" : "flight", "flight"),
+				["groups"] = groupsOn,
+				["apps"] = appsOpen,
+				["timeToApoapsis"] = Safe("tAp", () => ((IPatchedOrbit)v.Orbiter.PatchedConicsOrbit).TimeToAp, 0.0),
+				["deltaV"] = Safe("dv", () => v.VesselDeltaV.TotalDeltaVActual, 0.0),
+				["fuelPct"] = Safe("fuel", () => v.FuelPercentage, 0.0),
+				["throttle"] = Safe("throttle", () => (double)v.flightCtrlState.mainThrottle, 0.0),
+				["ec"] = Stored(ecId, "ec"),
+				["ecMax"] = Capacity(ecId, "ec"),
+				["mp"] = Stored(mpId, "mp"),
+				["mpMax"] = Capacity(mpId, "mp"),
+				// Etat reel du pilote automatique (et non le groupe d'action): c'est ce que le jeu affiche
+				["sas"] = Safe("sas", () => v.Autopilot.Enabled, false),
+				["sasMode"] = Safe("sasMode", () => v.Autopilot.AutopilotMode.ToString(), ""),
+				// Modes que le jeu accepterait maintenant (CanSetMode), separes par des virgules: les touches Manoeuvre s'estompent sinon.
+				// Une chaine, pas un tableau: le serialiseur du jeu etiquette les tableaux ($type / $values).
+				["sasAvailable"] = Safe("sasAvailable", () =>
+				{
+					var ok = new List<string>();
+					foreach (string name in GameCommands.SasModes)
+						if (Enum.TryParse(name, out AutopilotMode mode) && v.Autopilot.CanSetMode(mode)) ok.Add(name);
+					return string.Join(",", ok);
+				}, ""),
+				// Etat reel du RCS sur le vaisseau (la meme valeur que lit l'interface du jeu), pas le groupe d'action
+				["rcs"] = Safe("rcs", () => v.IsRCSEnabled, false),
+				["gear"] = On(KSPActionGroup.Gear),
+				["lights"] = On(KSPActionGroup.Lights),
+				["timeWarp"] = Safe("warp", () => Math.Round((double)game.ViewController.TimeWarp.CurrentRate), 1.0),
+				// Numero du niveau de warp (0 = x1) et nombre de niveaux: pour la rangee de chevrons de la molette
+				["timeWarpIndex"] = Safe("warpIndex", () => game.ViewController.TimeWarp.CurrentRateIndex, 0),
+				["timeWarpLevels"] = Safe("warpLevels", () => PhysicsSettings.TimeWarpLevels.Length, 11),
+				["timeWarpMax"] = warpMax,
+				// Noeud de manoeuvre: temps restant (s) et dV requis; hasNode faux = pas de noeud
+				["hasNode"] = node != null,
+				["nodeTime"] = node == null ? 0.0 : Safe("nodeTime", () => node.Time - game.UniverseModel.UniverseTime, 0.0),
+				["nodeDv"] = node == null ? 0.0 : Safe("nodeDv", () => node.BurnRequiredDV, 0.0),
+			};
+			LogSasChange(t);
+			return t;
+		}
+
+		// Diagnostic SAS: une ligne a chaque changement (ce que fait le joueur dans le jeu, pas seulement nos commandes)
+		private string _lastSas;
+		private void LogSasChange(Dictionary<string, object> t)
+		{
+			string avail = (string)t["sasAvailable"];
+			string now = "sas=" + t["sas"] + " mode=" + t["sasMode"] + " vitesse=" + t["speedMode"] + " dispo=[" + avail + "]";
+			if (now == _lastSas) return;
+			_lastSas = now;
+			_log("etat " + now);
+		}
+
+		private T Safe<T>(string field, Func<T> read, T fallback)
+		{
+			try { return read(); }
+			catch (Exception e)
+			{
+				if (_failed.Add(field)) _log("lecture '" + field + "' impossible: " + e.GetType().Name + " " + e.Message);
+				return fallback;
+			}
+		}
+	}
+}
