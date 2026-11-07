@@ -9,13 +9,19 @@
     <!-- Dossier du jeu: surchargeable avec -p:GameDir=... -->
     <GameDir Condition="'$(GameDir)' == ''">F:\Games\Games\Kerbal.Space.Program.2.v14669105</GameDir>
     <Managed>$(GameDir)\KSP2_x64_Data\Managed</Managed>
+    <!-- Disposition de Redux, detectee toute seule (surchargeable avec -p:ReduxLayout=old ou new) -->
+    <ReduxLayout Condition="'$(ReduxLayout)' == '' And Exists('$(Managed)\Ksp2Redux.dll')">new</ReduxLayout>
+    <ReduxLayout Condition="'$(ReduxLayout)' == ''">old</ReduxLayout>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <DebugType>portable</DebugType>
   </PropertyGroup>
 
   <!-- Assemblies du jeu: references de compilation uniquement, jamais copiees -->
   <ItemGroup>
-    <Reference Include="Ksp2Redux"><HintPath>$(Managed)\Ksp2Redux.dll</HintPath><Private>false</Private></Reference>
+    <!-- Redux recent: le code du jeu est dans Ksp2Redux.dll. Redux plus ancien: dans Assembly-CSharp.dll, avec ReduxLib et SpaceWarp2 a part. -->
+    <Reference Include="Ksp2Redux" Condition="'$(ReduxLayout)' == 'new'"><HintPath>$(Managed)\Ksp2Redux.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="ReduxLib" Condition="'$(ReduxLayout)' == 'old'"><HintPath>$(Managed)\ReduxLib.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="SpaceWarp2" Condition="'$(ReduxLayout)' == 'old'"><HintPath>$(Managed)\SpaceWarp2.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Assembly-CSharp"><HintPath>$(Managed)\Assembly-CSharp.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="Assembly-CSharp-firstpass"><HintPath>$(Managed)\Assembly-CSharp-firstpass.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="UnityEngine.CoreModule"><HintPath>$(Managed)\UnityEngine.CoreModule.dll</HintPath><Private>false</Private></Reference>
