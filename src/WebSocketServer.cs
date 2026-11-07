@@ -28,6 +28,9 @@ namespace Ksp2StreamDeck
 
 		public WebSocketServer(int port) { _listener = new TcpListener(IPAddress.Loopback, port); }
 
+		/// <summary>Port reellement ouvert (utile quand on a demande le port 0: Windows en choisit un).</summary>
+		public int Port { get { return ((IPEndPoint)_listener.LocalEndpoint).Port; } }
+
 		public int ClientCount { get { lock (_lock) return _clients.Count; } }
 
 		public void Start()

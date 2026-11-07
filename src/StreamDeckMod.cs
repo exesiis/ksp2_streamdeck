@@ -11,7 +11,11 @@ namespace Ksp2StreamDeck
 	/// </summary>
 	public class StreamDeckMod : KerbalMod
 	{
+		// Port prefere, puis les suivants si Windows ou un autre programme refuse celui-ci (le plugin cherche dans la meme plage)
 		private const int Port = 8765;
+		private const int PortCount = 10;
+		// Le port ouvert est ecrit ici pour que le plugin le retrouve meme si Windows l'a choisi (port 0)
+		private static readonly string PortFile = System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData), "ksp2_streamdeck", "port.txt");
 		private const float Period = 0.1f;
 
 		private WebSocketServer _server;
@@ -27,18 +31,38 @@ namespace Ksp2StreamDeck
 		{
 			_bridge = new GameBridge(m => SWLogger?.LogWarning("[StreamDeck] " + m));
 			_commandRunner = new GameCommands(Info);
-			_server = new WebSocketServer(Port);
-			_server.Log += Info;
-			_server.MessageReceived += _commands.Enqueue;
+			// 8765 puis ses 9 voisins, puis (port 0) un port libre choisi par Windows, qui evite les plages reservees (Docker, Hyper-V)
+			for (int i = 0; i <= PortCount; i++)
+			{
+				int port = i < PortCount ? Port + i : 0;
+				var server = new WebSocketServer(port);
+				server.Log += Info;
+				server.MessageReceived += _commands.Enqueue;
+				try
+				{
+					server.Start();
+					_server = server;
+					Info("serveur WebSocket sur ws://127.0.0.1:" + server.Port);
+					WritePortFile(server.Port);
+					return;
+				}
+				catch (System.Exception e)
+				{
+					server.Dispose();
+					SWLogger?.LogWarning("[StreamDeck] port " + port + " indisponible: " + e.Message);
+				}
+			}
+			SWLogger?.LogError("[StreamDeck] aucun port disponible (ni " + Port + " a " + (Port + PortCount - 1) + ", ni un port choisi par Windows)");
+		}
+
+		private void WritePortFile(int port)
+		{
 			try
 			{
-				_server.Start();
-				Info("serveur WebSocket sur ws://127.0.0.1:" + Port);
+				System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(PortFile));
+				System.IO.File.WriteAllText(PortFile, port.ToString());
 			}
-			catch (System.Exception e)
-			{
-				SWLogger?.LogError("[StreamDeck] impossible d'ouvrir le port " + Port + ": " + e.Message);
-			}
+			catch (System.Exception e) { SWLogger?.LogWarning("[StreamDeck] impossible d'ecrire " + PortFile + ": " + e.Message); }
 		}
 
 		private void Update()
@@ -67,6 +91,7 @@ namespace Ksp2StreamDeck
 		{
 			_server?.Dispose();
 			_server = null;
+			try { System.IO.File.Delete(PortFile); } catch { /* deja absent */ }
 		}
 	}
 }

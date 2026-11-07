@@ -2,7 +2,7 @@
 	"spec": "2.0",
 	"mod_id": "ksp2_streamdeck",
 	"name": "Stream Deck Bridge",
-	"author": "exesi",
+	"author": "exesis",
 	"description": "Expose la telemetrie de vol et recoit des commandes pour un Stream Deck + ou 15 touches (WebSocket local 127.0.0.1:8765).",
 	"source": "",
 	"version": "0.3.1",
