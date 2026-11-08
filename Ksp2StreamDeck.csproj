@@ -6,8 +6,8 @@
     <Nullable>disable</Nullable>
     <AssemblyName>Ksp2StreamDeck</AssemblyName>
     <RootNamespace>Ksp2StreamDeck</RootNamespace>
-    <!-- Dossier du jeu: surchargeable avec -p:GameDir=... -->
-    <GameDir Condition="'$(GameDir)' == ''">F:\Games\Games\Kerbal.Space.Program.2.v14669105</GameDir>
+    <!-- Game folder: override with -p:GameDir=... (deploy.ps1 finds it on its own and passes it) -->
+    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files (x86)\Steam\steamapps\common\Kerbal Space Program 2</GameDir>
     <Managed>$(GameDir)\KSP2_x64_Data\Managed</Managed>
     <!-- Disposition de Redux, detectee toute seule (surchargeable avec -p:ReduxLayout=old ou new) -->
     <ReduxLayout Condition="'$(ReduxLayout)' == '' And Exists('$(Managed)\Ksp2Redux.dll')">new</ReduxLayout>
